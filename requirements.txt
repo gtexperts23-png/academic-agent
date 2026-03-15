@@ -3,4 +3,5 @@ requests
 beautifulsoup4
 gspread
 oauth2client
-pandas
+schedule
+lxml
