@@ -5,13 +5,25 @@ import time
 import random
 import schedule
 import datetime
+import threading
+
+from flask import Flask
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+
+# ================== FLASK PORT FOR RENDER ==================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Academic Agent Running"
+
+
+# ================== GOOGLE SHEET ==================
+
 SHEET_NAME = "Academic Conferences Agent"
-
-
-# ================= GOOGLE SHEET =================
 
 def connect_sheet():
 
@@ -33,9 +45,9 @@ def write_row(data):
 
     sheet = connect_sheet()
 
-    existing_links = sheet.col_values(11)
+    existing = sheet.col_values(11)
 
-    if data["link"] in existing_links:
+    if data["link"] in existing:
         return
 
     sheet.append_row([
@@ -54,20 +66,18 @@ def write_row(data):
         str(datetime.date.today())
     ])
 
-    print("✅ WRITTEN:", data["name"])
+    print("✅ SAVED:", data["name"])
 
 
-# ================= AI PART =================
+# ================== REAL INTELLIGENCE AGENT ==================
 
 FIELDS = [
     "medical",
     "engineering",
     "education",
-    "science",
     "pharmacy",
-    "dentistry",
     "ai",
-    "public health"
+    "science"
 ]
 
 COUNTRIES = [
@@ -76,7 +86,6 @@ COUNTRIES = [
     "france",
     "spain",
     "netherlands",
-    "switzerland",
     "usa",
     "canada",
     "australia",
@@ -88,57 +97,67 @@ def generate_queries():
 
     queries = []
 
-    year = 2026
-
     for f in FIELDS:
         for c in COUNTRIES:
             queries.append(
-                f"{f} international conference {c} {year} speakers"
+                f"{f} international conference speakers {c} 2026"
             )
 
     random.shuffle(queries)
 
-    return queries[:15]
+    return queries[:20]
 
 
 def fetch(url):
 
     try:
-        r = requests.get(url, timeout=20, headers={
-            "User-Agent": "Mozilla/5.0"
-        })
+        r = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=25
+        )
         return r.text
     except:
         return None
 
 
-def extract_names(text):
+def count_names(text):
 
-    names = re.findall(r"Prof\.?\s+[A-Z][a-z]+", text)
+    prof = re.findall(r"Prof\.?\s+[A-Z][a-z]+", text)
+    dr = re.findall(r"Dr\.?\s+[A-Z][a-z]+", text)
 
-    return len(names)
-
-
-def extract_city(text):
-
-    m = re.search(r"(Rome|Paris|Berlin|Madrid|Toronto|Tokyo|Sydney)", text)
-    return m.group(1) if m else ""
+    return len(prof) + len(dr)
 
 
 def extract_country(text):
 
-    m = re.search(r"(Italy|France|Germany|Spain|Canada|Japan|Australia)", text)
-    return m.group(1) if m else ""
+    m = re.search(
+        r"Italy|Germany|France|Spain|Netherlands|USA|Canada|Australia|Japan",
+        text
+    )
+    return m.group(0) if m else ""
+
+
+def extract_city(text):
+
+    m = re.search(
+        r"Rome|Paris|Berlin|Madrid|Amsterdam|Toronto|Tokyo|Sydney",
+        text
+    )
+    return m.group(0) if m else ""
 
 
 def extract_duration(text):
 
-    days = re.findall(r"\d{1,2}\s+(June|July|August)", text)
+    days = re.findall(
+        r"\d{1,2}\s+(June|July|August|September)",
+        text
+    )
 
     return len(days)
 
 
-def analyze(url, field):
+def deep_analyze(url, field):
 
     html = fetch(url)
 
@@ -149,7 +168,7 @@ def analyze(url, field):
 
     text = soup.get_text(" ", strip=True)
 
-    names = extract_names(text)
+    names = count_names(text)
 
     if names < 10:
         return
@@ -159,8 +178,8 @@ def analyze(url, field):
     if duration < 3:
         return
 
-    city = extract_city(text)
     country = extract_country(text)
+    city = extract_city(text)
 
     title = soup.title.string if soup.title else "Conference"
 
@@ -176,6 +195,37 @@ def analyze(url, field):
 
     write_row(data)
 
+    # ======= FOLLOW INTERNAL LINKS (REAL AGENT FEATURE)
+
+    for a in soup.select("a"):
+
+        href = a.get("href")
+
+        if not href:
+            continue
+
+        if "speaker" in href or "faculty" in href or "participant" in href:
+
+            if href.startswith("/"):
+                base = "/".join(url.split("/")[:3])
+                href = base + href
+
+            html2 = fetch(href)
+
+            if not html2:
+                continue
+
+            text2 = BeautifulSoup(html2, "lxml").get_text(" ", strip=True)
+
+            names2 = count_names(text2)
+
+            if names2 >= 10:
+                data["link"] = href
+                data["names"] = names2
+                write_row(data)
+
+            time.sleep(3)
+
 
 def search_cycle():
 
@@ -183,11 +233,11 @@ def search_cycle():
 
     for q in queries:
 
-        print("🔎 Searching:", q)
+        print("🔎", q)
 
-        url = f"https://www.google.com/search?q={q}"
+        google = f"https://www.google.com/search?q={q}"
 
-        html = fetch(url)
+        html = fetch(google)
 
         if not html:
             continue
@@ -206,19 +256,27 @@ def search_cycle():
 
             field = q.split()[0]
 
-            analyze(link, field)
+            deep_analyze(link, field)
 
-            time.sleep(random.randint(5, 9))
+            time.sleep(random.randint(4, 8))
 
 
-# ================= SCHEDULER =================
+def agent_loop():
 
-schedule.every(3).hours.do(search_cycle)
+    print("🚀 REAL Academic Agent Started")
 
-print("🚀 Academic Agent Started")
+    search_cycle()
 
-search_cycle()
+    schedule.every(3).hours.do(search_cycle)
 
-while True:
-    schedule.run_pending()
-    time.sleep(60)
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+
+# ================== START BOTH ==================
+
+threading.Thread(target=agent_loop).start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
