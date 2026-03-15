@@ -1,66 +1,35 @@
-import requests
-from bs4 import BeautifulSoup
-import random
+from flask import Flask
+import threading
 import time
 
-SEARCH_TERMS = [
-    "medical conference 2026 speakers",
-    "academic congress 2026 faculty",
-    "symposium programme participants 2026",
-    "international conference speakers list"
-]
+from agent.query_gen import generate_queries
+from agent.search_engines import duckduckgo_search
+from agent.conference_ai import analyze_link
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+app = Flask(__name__)
 
-def search_duckduckgo(query):
-    url = f"https://duckduckgo.com/html/?q={query}"
-    r = requests.get(url, headers=HEADERS, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+def agent_loop():
+    while True:
+        print("Agent cycle started")
 
-    links = []
-    for a in soup.select(".result__a"):
-        href = a.get("href")
-        if href:
-            links.append(href)
+        queries = generate_queries(10)
 
-    return links[:5]
+        for q in queries:
+            print("Searching:", q)
 
+            links = duckduckgo_search(q)
 
-def extract_names_from_page(url):
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
+            for link in links:
+                result = analyze_link(link)
 
-        texts = soup.get_text("\n").split("\n")
-        names = [t.strip() for t in texts if len(t.strip().split()) == 2]
+                if result:
+                    print("GOOD:", result)
 
-        return len(set(names))
+        print("Sleeping 3 hours")
+        time.sleep(10800)
 
-    except:
-        return 0
+threading.Thread(target=agent_loop).start()
 
-
-def run_agent():
-    print("Agent started")
-
-    for term in SEARCH_TERMS:
-        print("Searching:", term)
-
-        links = search_duckduckgo(term)
-
-        for link in links:
-            print("Checking:", link)
-
-            count = extract_names_from_page(link)
-
-            print("Names found:", count)
-
-            if count >= 10:
-                print("✅ GOOD CONFERENCE:", link)
-
-            time.sleep(random.randint(5,10))
-
-
-run_agent()
+@app.route("/")
+def home():
+    return "Agent Alive"
