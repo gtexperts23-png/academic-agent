@@ -1,6 +1,7 @@
 from flask import Flask
 import threading
 import time
+import os
 
 from agent.query_gen import generate_queries
 from agent.search_engines import duckduckgo_search
@@ -33,3 +34,7 @@ threading.Thread(target=agent_loop).start()
 @app.route("/")
 def home():
     return "Agent Alive"
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
