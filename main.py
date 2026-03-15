@@ -6,12 +6,13 @@ import os
 from agent.query_gen import generate_queries
 from agent.search_engines import duckduckgo_search
 from agent.conference_ai import analyze_link
+from agent.sheet_writer import write_row
 
 app = Flask(__name__)
 
 def agent_loop():
     while True:
-        print("Agent cycle started")
+        print("========== AGENT CYCLE STARTED ==========")
 
         queries = generate_queries(10)
 
@@ -21,19 +22,32 @@ def agent_loop():
             links = duckduckgo_search(q)
 
             for link in links:
+                print("Checking:", link)
+
                 result = analyze_link(link)
 
                 if result:
-                    print("GOOD:", result)
+                    print("GOOD CONFERENCE FOUND:", result)
 
-        print("Sleeping 3 hours")
+                    try:
+                        write_row(result)
+                        print("Written to sheet")
+                    except Exception as e:
+                        print("Sheet error:", e)
+
+                time.sleep(3)
+
+        print("Sleeping 3 hours...")
         time.sleep(10800)
+
 
 threading.Thread(target=agent_loop).start()
 
+
 @app.route("/")
 def home():
-    return "Agent Alive"
+    return "Academic Agent Alive"
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
